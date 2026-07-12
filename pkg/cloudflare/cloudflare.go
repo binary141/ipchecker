@@ -24,15 +24,25 @@ type Cloudflare struct {
 //      --data '{"type":"A","name":"example.com","content":"yournewiphere","ttl":1,"proxied":false}'
 
 func (c Cloudflare) PutNewIP(ip string) (int, error) {
-	if c.APIKey == "" || c.ZoneID == "" || c.DNSID == "" || c.Email == "" || (c.DomainName == "" && len(c.DomainNames) == 0) {
+	filteredDomains := make([]string, 0, len(c.DomainNames))
+
+	for _, d := range c.DomainNames {
+		if strings.TrimSpace(d) == "" {
+			continue
+		}
+
+		filteredDomains = append(filteredDomains, d)
+	}
+
+	if c.APIKey == "" || c.ZoneID == "" || c.DNSID == "" || c.Email == "" || (c.DomainName == "" && len(filteredDomains) == 0) {
 		return -1, fmt.Errorf("Cloudflare config invalid. Please ensure all envs for Cloudflare are properly defined")
 	}
 
-	if len(c.DomainNames) == 0 && c.DomainName != "" {
-		c.DomainNames = []string{c.DomainName}
+	if len(filteredDomains) == 0 && c.DomainName != "" {
+		filteredDomains = []string{c.DomainName}
 	}
 
-	for _, d := range c.DomainNames {
+	for _, d := range filteredDomains {
 		// add ip to the body
 		body := fmt.Sprintf(`{"type":"A","name":"%s","content":"%s","ttl":1,"proxied":false}`, d, ip)
 
@@ -71,9 +81,7 @@ func (c Cloudflare) PutNewIP(ip string) (int, error) {
 			return resp.StatusCode, err
 		}
 
-		if len(c.DomainNames) > 1 {
-			fmt.Printf("Successfully updated domain: %s\n", d)
-		}
+		fmt.Printf("Successfully updated domain: %s\n", d)
 	}
 
 	return http.StatusOK, nil

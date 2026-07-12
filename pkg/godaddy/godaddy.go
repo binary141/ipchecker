@@ -25,18 +25,28 @@ curl -X PUT "https://api.godaddy.com/v1/domains/$domain/records/$type/$name" \
 */
 
 func (g Godaddy) PutNewIP(ip string) (int, error) {
-	if (g.Domain == "" && len(g.Domains) == 0) || g.Key == "" || g.Secret == "" || g.Type == "" || g.Name == "" {
+	filteredDomains := make([]string, 0, len(g.Domains))
+
+	for _, d := range g.Domains {
+		if strings.TrimSpace(d) == "" {
+			continue
+		}
+
+		filteredDomains = append(filteredDomains, d)
+	}
+
+	if (g.Domain == "" && len(filteredDomains) == 0) || g.Key == "" || g.Secret == "" || g.Type == "" || g.Name == "" {
 		return -1, fmt.Errorf("GoDaddy config invalid. Please ensure all envs for GoDaddy are properly defined")
 	}
 
 	// add ip to the body
 	body := fmt.Sprintf(`[{"data":"%s"}]`, ip)
 
-	if len(g.Domains) == 0 && g.Domain != "" {
-		g.Domains = []string{g.Domain}
+	if len(filteredDomains) == 0 && g.Domain != "" {
+		filteredDomains = []string{g.Domain}
 	}
 
-	for _, d := range g.Domains {
+	for _, d := range filteredDomains {
 		// create the request
 		req, err := http.NewRequest("PUT",
 			fmt.Sprintf("https://api.godaddy.com/v1/domains/%s/records/%s/%s", d, g.Type, g.Name),
