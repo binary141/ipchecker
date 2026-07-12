@@ -8,11 +8,12 @@ import (
 )
 
 type Cloudflare struct {
-	ZoneID     string
-	DNSID      string
-	Email      string
-	APIKey     string
-	DomainName string
+	ZoneID      string
+	DNSID       string
+	Email       string
+	APIKey      string
+	DomainName  string
+	DomainNames []string
 }
 
 // example curl request
@@ -23,45 +24,58 @@ type Cloudflare struct {
 //      --data '{"type":"A","name":"example.com","content":"yournewiphere","ttl":1,"proxied":false}'
 
 func (c Cloudflare) PutNewIP(ip string) (int, error) {
-	if c.APIKey == "" || c.ZoneID == "" || c.DNSID == "" || c.Email == "" || c.DomainName == "" {
+	if c.APIKey == "" || c.ZoneID == "" || c.DNSID == "" || c.Email == "" || (c.DomainName == "" && len(c.DomainNames) == 0) {
 		return -1, fmt.Errorf("Cloudflare config invalid. Please ensure all envs for Cloudflare are properly defined")
 	}
 
-	// add ip to the body
-	body := fmt.Sprintf(`{"type":"A","name":"%s","content":"%s","ttl":1,"proxied":false}`, c.DomainName, ip)
-
-	// create the request
-	req, err := http.NewRequest("PUT", "https://api.cloudflare.com/client/v4/zones/"+c.ZoneID+"/dns_records/"+c.DNSID, strings.NewReader(body))
-	if err != nil {
-		return -1, err
+	if len(c.DomainNames) == 0 && c.DomainName != "" {
+		c.DomainNames = []string{c.DomainName}
 	}
 
-	// add the headers
-	req.Header.Add("X-Auth-Email", c.Email)
-	req.Header.Add("Authorization", c.APIKey)
-	req.Header.Add("Content-Type", "application/json")
+	for _, d := range c.DomainNames {
+		// add ip to the body
+		body := fmt.Sprintf(`{"type":"A","name":"%s","content":"%s","ttl":1,"proxied":false}`, d, ip)
 
-	// send the request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return -1, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != 200 {
-		// read the body
-		respBody, err := io.ReadAll(resp.Body)
+		// create the request
+		req, err := http.NewRequest("PUT", "https://api.cloudflare.com/client/v4/zones/"+c.ZoneID+"/dns_records/"+c.DNSID, strings.NewReader(body))
 		if err != nil {
-			panic(err)
+			return -1, err
 		}
-		println("Error updating ip address with cloudflare")
-		print(string(respBody))
-		return resp.StatusCode, err
+
+		// add the headers
+		req.Header.Add("X-Auth-Email", c.Email)
+		req.Header.Add("Authorization", c.APIKey)
+		req.Header.Add("Content-Type", "application/json")
+
+		// send the request
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return -1, err
+		}
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+
+		if resp.StatusCode != http.StatusOK {
+			// read the body
+			respBody, err := io.ReadAll(resp.Body)
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Printf("Error updating ip address for domain: %s!\n", d)
+
+			fmt.Println(string(respBody))
+
+			return resp.StatusCode, err
+		}
+
+		if len(c.DomainNames) > 1 {
+			fmt.Printf("Successfully updated domain: %s\n", d)
+		}
 	}
 
-	return resp.StatusCode, nil
+	return http.StatusOK, nil
 
 }
